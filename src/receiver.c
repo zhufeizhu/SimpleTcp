@@ -27,7 +27,7 @@ int sockfd;
 
 
 struct sockaddr_in addr;
-socklen_t len = sizeof(send_addr);
+socklen_t len = sizeof(addr);
 int expected_num = 0;
 int ack_lost = 0;
 int recv_base = 0;
@@ -46,6 +46,7 @@ void sendUdt(char* msg,int n){
     fflush(output);
 }
 
+/*build Tcp connection and transport protocol window_sie .etc message*/
 int initSocket(){
     printf("**********************************\n");
     printf("** Establish Tcp Connect Start! **\n");
@@ -70,7 +71,7 @@ int initSocket(){
     printf("Please input the arguments for Tcp connection!\n");
     printf("RPOTOCOL: ");
     scanf("%s",buf);
-    if(strcmp(buf,"GBN")){
+    if(strcmp(buf,"GBN")==0){
         PROTOCOL = GBN;
     } else if(strcmp(buf,"SR")){
         PROTOCOL = SR;
@@ -92,7 +93,7 @@ int initSocket(){
 
     Protocol pro;
     pro.pro_type = PROTOCOL;
-    pro.window_size = WINDOW_SIZE;
+    pro.window_size = (PROTOCOL==GBN)?1:WINDOW_SIZE;
     pro.msg_len = MAX_BYTE;
     pro.time_out = TIMEOUT;
     pro.seq_range = MAX_SEQ;
@@ -134,15 +135,14 @@ int onGBNReceiveMsg(TcpHeader* header,char* msg, int n){
 }
 
 void ReplyAck(int ack){
-    /*模拟丢ack*/
-    if((ack != 20) || ack_lost > 0){
-        TcpHeader *ackHeader = createTcpHeader(0,ack,ACK,0,0);
-        sendto(sockfd,ackHeader,sizeof(TcpHeader),0,(struct sockaddr*)&send_addr,len);
-        printf("Ack %d sent\n",ack);
-        free(ackHeader);
-    } else {
-        ack_lost++;
+    TcpHeader *ackHeader = createTcpHeader(0,ack,0,0);
+    int n = send(sockfd,ackHeader,sizeof(TcpHeader),0);
+    if(n <= 0){
+        printf("Ack send Failed!\n");
+        return;
     }
+    printf("Ack %d sent\n",ack);
+    free(ackHeader);
 }
 
 int onSRReceiveMsg(TcpHeader* header, char* msg, int n ){
@@ -212,42 +212,10 @@ int onSRReceiveMsg(TcpHeader* header, char* msg, int n ){
     return -1;
 }
 
-extern errno;
 int main(int argc, char** argv){
-    int c;
-    while((c = getopt(argc,argv,"p:l:s:r:")) != -1){
-        switch(c){
-            case 'p':{
-                if(strcmp("GBN",optarg)==0){
-                    PROTOCOL = GBN;
-                } else if(strcmp("SR",optarg) == 0){
-                    PROTOCOL = SR;
-                } else {
-                    PROTOCOL = ERROR_PROTOCOL;
-                }
-                break;
-            }
-            case 'l':{
-                MAX_BYTE = atoi(optarg);
-                break;
-            }
-            case 's':{
-                if(PROTOCOL == SR)
-                    WINDOW_SIZE = atoi(optarg);
-                else
-                    WINDOW_SIZE = 1;
-                break;
-            }
-            case 'r':{
-                MAX_SEQ = atoi(optarg);
-                break;
-            }
-        }
-    }
-
     /*如果socket初始化失败 程序退出*/
     if(!initSocket()) return 0;
-    output = fopen("./test/output.txt","w");
+    output = fopen("/Users/zhuqs/workspace/dai/SimpelTCP/version1/test/output.txt","w");
     if(!output){
         printf("errno is %d\n",errno);
         printf("open out file failed\n");
@@ -256,23 +224,13 @@ int main(int argc, char** argv){
     char buf[MAX_BYTE + 100];
     int last_len = 0;
     while(1){
-        int n = recvfrom(sockfd,buf,MAX_BYTE + 100,0,(struct sockaddr*)&send_addr,&len);
-        TcpHeader* header = getTcpHeader(buf,n);
-        char* msg = getTcpMsg(buf,&n);
-        if(header->type == FIN){
-            free(header);
-            printf("recv all data and close connect\n");
+        int n = recv(sockfd,buf,MAX_BYTE + 100,0);
+        if(n <= 0){
+            printf("recv all data!\n");
             break;
         }
-        if (header->type == SYN){
-            if (establishTcpConnect(header)){
-                free(header);
-                continue;
-            } else{
-                free(header);
-                break;
-            }
-        }
+        TcpHeader* header = getTcpHeader(buf,n);
+        char* msg = getTcpMsg(buf,&n);
         last_seq = header->seq;
         int ack;
         if(PROTOCOL == GBN){

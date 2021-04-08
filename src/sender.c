@@ -8,6 +8,7 @@
 #include "SimpleTcp.h"
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define MAX_SIZE 1024
 
@@ -56,17 +57,19 @@ void* recvGBNAck(){
     char buf[MAX_BYTE + 100];
     int count = 0;
     while(1){
-        recv(sender_sock,buf,MAX_BYTE+100,0);
+        recv(recv_sock,buf,MAX_BYTE+100,0);
         TcpHeader header;
         memcpy(&header,buf,sizeof(TcpHeader));
+        pthread_mutex_lock(&mutex);
         printf("ACK %d received\n",header.ack);
         if(header.ack == last_seq){
             printf("revc all ack and close connection!\n");
             stop_timer(0);
-            closeTcpConnect();
+            // closeTcpConnect();
             close_timer = 1;
             break;
         }
+        printf("111\n");
         base = header.ack + 1;
         printf("Current window = [");
         for(int i = base; i < (base + WINDOW_SIZE); i++){
@@ -79,7 +82,9 @@ void* recvGBNAck(){
         } else {
             start_timer(0);
         }
+        pthread_mutex_unlock(&mutex);
     }
+    printf("recvAck thread exit\n");
     pthread_exit(pthread_self());
 }
 
@@ -117,7 +122,7 @@ void* recvSRAck(){
             printf("]\n");
             if(header.ack == last_seq){
                 close_timer = 1;
-                closeTcpConnect();
+                // closeTcpConnect();
                 break;
             }    
         }
@@ -190,6 +195,8 @@ void* timer(){
     pthread_exit(pthread_self());
 }
 
+extern errno;
+
 int establishTcpConnect(){
     printf("**********************************\n");
     printf("** Establish Tcp Connect Start! **\n");
@@ -200,23 +207,15 @@ int establishTcpConnect(){
         return 0;
     }
     char buf[MAX_SIZE];
-    int n = recv(recv_sock,buf,MAX_BYTE,0);
+    int n = recv(recv_sock,buf,MAX_SIZE,0);
     if(n <= 0){
         printf("** Establish Tcp Connect Failed**\n");
+        printf("%d",errno);
         printf("**********************************\n\n");
         return 0;
     }
-    TcpHeader* header = (TcpHeader*)malloc(sizeof(TcpHeader));
-    memcpy(header,buf,sizeof(TcpHeader));
-    char* msg = getTcpMsg(buf,&n);
     Protocol* pro = (Protocol*)malloc(sizeof(Protocol));
-    memcpy(pro,buf+sizeof(TcpHeader),n);
-    int crc = calculateCRC(0,msg,n);
-    if(crc != header->checksum){
-        printf("** Establish Tcp Connect Failed**\n");
-        printf("**********************************\n\n");
-        return 0;
-    }
+    memcpy(pro,buf,sizeof(Protocol));
     RPOTOCOL = pro->pro_type;
     MAX_BYTE = pro->msg_len;
     TIMEOUT = pro->time_out;
@@ -284,7 +283,7 @@ void initSocket(){
 }
 
 int main(int argc, char** argv){
-    FILE* file =  fopen("./test/input.txt","r");
+    FILE* file =  fopen("/Users/zhuqs/workspace/dai/SimpelTCP/version1/test/input.txt","r");
     if(!file){
         printf("open file failed\n");
         return 0;
@@ -312,7 +311,9 @@ int main(int argc, char** argv){
         int crc = calculateCRC(0,buf,n);
         TcpHeader* header = createTcpHeader(next_seq,0,0,crc);
         char* msg = createTcpMsg(header,buf,&n);
-        sendto(sender_sock,msg,n,0,(struct sockaddr*)(&recv_addr),sizeof(recv_addr));
+        if(send(recv_sock,msg,n,0) != n){
+            printf("send failed\n");
+        }
         origin_num++;
         printf("Packet %d sent\n",next_seq);
         pthread_mutex_lock(&mutex);
@@ -345,7 +346,7 @@ int main(int argc, char** argv){
         }
     }
     pthread_join(recv_id,NULL);
-    pthread_join(timer_id,NULL);
+    
     time(&end);
     printf("\nSession successfully terminated\n");
     int total_time = end-start;
