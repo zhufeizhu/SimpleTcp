@@ -209,7 +209,7 @@ int establishTcpConnect(){
     TcpHeader* header = (TcpHeader*)malloc(sizeof(TcpHeader));
     memcpy(header,buf,sizeof(TcpHeader));
     char* msg = getTcpMsg(buf,&n);
-    RPOTOCOL* pro = (RPOTOCOL*)malloc(sizeof(RPOTOCOL));
+    Protocol* pro = (Protocol*)malloc(sizeof(Protocol));
     memcpy(pro,buf+sizeof(TcpHeader),n);
     int crc = calculateCRC(0,msg,n);
     if(crc != header->checksum){
@@ -264,7 +264,7 @@ void initSocket(){
     bzero(&send_addr,sizeof(send_addr));
     bzero(&recv_addr,sizeof(recv_addr));
     send_addr.sin_family = AF_INET;
-    send_addr.sin_port = htons(SEND_PORT);
+    send_addr.sin_port = htons(SERVER_PORT);
     send_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     int ret = bind(sender_sock,(struct sockaddr*)&send_addr,sizeof(send_addr));

@@ -20,9 +20,13 @@ int WINDOW_SIZE;
 int MAX_BYTE;
 int PROTOCOL;
 int MAX_SEQ;
+int TIMEOUT;
 
+/*receiver sock fd*/
 int sockfd;
-struct sockaddr_in rev_addr,send_addr;
+
+
+struct sockaddr_in addr;
 socklen_t len = sizeof(send_addr);
 int expected_num = 0;
 int ack_lost = 0;
@@ -42,7 +46,26 @@ void sendUdt(char* msg,int n){
     fflush(output);
 }
 
-void initSocket(){
+int initSocket(){
+    printf("**********************************\n");
+    printf("** Establish Tcp Connect Start! **\n");
+    sockfd = socket(AF_INET,SOCK_STREAM,0);
+    bzero(&addr,sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(SERVER_PORT);
+
+    inet_pton(AF_INET,"127.0.0.1",&addr.sin_addr.s_addr);
+
+    int ret = connect(sockfd,(struct sockaddr*)&addr,sizeof(addr));
+
+    if (ret){
+        printf("Establish Tcp Connect Failed!\n");
+        printf("**********************************\n\n");
+        return 0;
+    }
+    printf("** Establish Tcp Connect Succeed *\n");
+    printf("**********************************\n\n");
+
     char buf[100];
     printf("Please input the arguments for Tcp connection!\n");
     printf("RPOTOCOL: ");
@@ -53,41 +76,38 @@ void initSocket(){
         PROTOCOL = SR;
     } else {
         PROTOCOL = ERROR_PROTOCOL;
-        return;
+        return 0;
     }
+    printf("slide_window size: ");
+    scanf("%d",&WINDOW_SIZE);
 
+    printf("transport data size: ");
+    scanf("%d",&MAX_BYTE);
 
-    sockfd = socket(AF_INET,SOCK_STREAM,0);
-    bzero(&rev_addr,sizeof(rev_addr));
-    rev_addr.sin_family = AF_INET;
-    rev_addr.sin_port = htons(RECV_PORT);
-    rev_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    bind(sockfd,(struct sockaddr*)(&rev_addr),sizeof(rev_addr));
+    printf("time out: ");
+    scanf("%d",&TIMEOUT);
+
+    printf("range of sequence: ");
+    scanf("%d",&MAX_SEQ);
+
+    Protocol pro;
+    pro.pro_type = PROTOCOL;
+    pro.window_size = WINDOW_SIZE;
+    pro.msg_len = MAX_BYTE;
+    pro.time_out = TIMEOUT;
+    pro.seq_range = MAX_SEQ;
+    memcpy(buf,&pro,sizeof(Protocol));
+    int n = send(sockfd,buf,sizeof(Protocol),0);
+    if(n <= 0){
+        printf("send initial msg failed!\n");
+        return 0;
+    }
+    printf("send initial msg succeed!\n");
     memset(flag_windows,0,WINDOW_SIZE);
     for(int i = 0; i < WINDOW_SIZE; i++){
         slide_windwos[i] = NULL;
     }
     last_buf = (char*)malloc(MAX_BYTE);
-}
-
-int establishTcpConnect(TcpHeader *header){
-    printf("**********************************\n");
-    printf("** Establish Tcp Connect Start! **\n");
-    int seq = 9, ack = header->seq + 1;
-    TcpHeader* h = createTcpHeader(seq,ack,SYN&ACK,0,0);
-    sendto(sockfd,(void*)h,sizeof(TcpHeader),0,(struct sockaddr*)&send_addr,sizeof(send_addr));
-    recvfrom(sockfd,(void*)h,sizeof(TcpHeader),0,(struct sockaddr*)&send_addr,&len);
-    if (h->type == ACK && h->seq == ack && h->ack == seq + 1){
-        free(h);
-        printf("** Establish Tcp Connect Succeed *\n");
-        printf("**********************************\n\n");
-        return 1;
-    } else {
-        free(h);
-        printf("Establish Tcp Connect Failed!\n");
-        printf("**********************************\n\n");
-        return 0;
-    }
 }
 
 int onGBNReceiveMsg(TcpHeader* header,char* msg, int n){
@@ -224,7 +244,9 @@ int main(int argc, char** argv){
             }
         }
     }
-    initSocket();
+
+    /*如果socket初始化失败 程序退出*/
+    if(!initSocket()) return 0;
     output = fopen("./test/output.txt","w");
     if(!output){
         printf("errno is %d\n",errno);

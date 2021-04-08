@@ -22,7 +22,7 @@ typedef struct{
     int msg_len;
     int time_out;
     int seq_range;
-} RPOTOCOL;
+} Protocol;
 
 typedef struct{
     char* data;
