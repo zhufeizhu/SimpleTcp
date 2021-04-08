@@ -3,11 +3,10 @@
 #include <string.h>
 #include <stdio.h>
 
-TcpHeader* createTcpHeader(int seq, int ack, MsgType type,int window,int checksum){
+TcpHeader* createTcpHeader(int seq, int ack,int window,int checksum){
     TcpHeader* header = (TcpHeader*)malloc(sizeof(TcpHeader));
     header->ack = ack;
     header->seq = seq;
-    header->type = type;
     header->window = window;
     header->checksum = checksum;
     return header;

@@ -43,7 +43,21 @@ void sendUdt(char* msg,int n){
 }
 
 void initSocket(){
-    sockfd = socket(AF_INET,SOCK_DGRAM,0);
+    char buf[100];
+    printf("Please input the arguments for Tcp connection!\n");
+    printf("RPOTOCOL: ");
+    scanf("%s",buf);
+    if(strcmp(buf,"GBN")){
+        PROTOCOL = GBN;
+    } else if(strcmp(buf,"SR")){
+        PROTOCOL = SR;
+    } else {
+        PROTOCOL = ERROR_PROTOCOL;
+        return;
+    }
+
+
+    sockfd = socket(AF_INET,SOCK_STREAM,0);
     bzero(&rev_addr,sizeof(rev_addr));
     rev_addr.sin_family = AF_INET;
     rev_addr.sin_port = htons(RECV_PORT);
@@ -178,6 +192,7 @@ int onSRReceiveMsg(TcpHeader* header, char* msg, int n ){
     return -1;
 }
 
+extern errno;
 int main(int argc, char** argv){
     int c;
     while((c = getopt(argc,argv,"p:l:s:r:")) != -1){
@@ -210,8 +225,9 @@ int main(int argc, char** argv){
         }
     }
     initSocket();
-    output = fopen("../test/output.txt","w");
+    output = fopen("./test/output.txt","w");
     if(!output){
+        printf("errno is %d\n",errno);
         printf("open out file failed\n");
         return 0;
     }
